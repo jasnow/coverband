@@ -15,3 +15,7 @@ spec/reports
 test/tmp
 test/version_tmp
 tmp
+
+# Added these to not force others to use them.
+.overcommit.yml
+.rvmrc
