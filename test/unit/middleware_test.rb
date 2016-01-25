@@ -1,8 +1,8 @@
 require File.expand_path('../test_helper', File.dirname(__FILE__))
+require File.expand_path('../fake_app/basic_rack', File.dirname(__FILE__))
 require 'rack'
 
 class MiddlewareTest < Test::Unit::TestCase
-
   test "call app" do
     request = Rack::MockRequest.env_for("/anything.json")
     Coverband::Base.instance.reset_instance
@@ -80,40 +80,33 @@ class MiddlewareTest < Test::Unit::TestCase
   test 'always report coverage when sampling' do
     request = Rack::MockRequest.env_for("/anything.json")
     Coverband::Base.instance.reset_instance
-
-    file_with_path = File.expand_path('../../lib/coverband/middleware.rb', File.dirname(__FILE__))
-
-    middleware = Coverband::Middleware.new(fake_app)
+    middleware = Coverband::Middleware.new(fake_app_with_lines)
     assert_equal false, Coverband::Base.instance.instance_variable_get("@enabled")
     Coverband::Base.instance.instance_variable_set("@sample_percentage", 100.0)
     fake_redis = Redis.new
     Coverband::Base.instance.instance_variable_set("@reporter", Coverband::RedisStore.new(fake_redis))
     fake_redis.stubs(:info).returns({'redis_version' => 3.0})
     fake_redis.expects(:sadd).at_least_once
-    trace_point = Coverband::Base.instance.instance_variable_get(:@trace)
-    line_numbers = trace_point ? [11,13] : [11, 11, 11, 13]
-    fake_redis.expects(:sadd).at_least_once.with("coverband.#{file_with_path}", line_numbers)
+    fake_redis.expects(:sadd).at_least_once.with("coverband.#{basic_rack_ruby_file}", [5])
     results = middleware.call(request)
     assert_equal true, Coverband::Base.instance.instance_variable_get("@enabled")
   end
 
-  if defined? TracePoint
-    test 'report only on calls when configured' do
-      request = Rack::MockRequest.env_for("/anything.json")
-      Coverband.configuration.trace_point_events = [:call]
-      Coverband::Base.instance.reset_instance
-      file_with_path = File.expand_path('../../lib/coverband/base.rb', File.dirname(__FILE__))
-      middleware = Coverband::Middleware.new(fake_app)
-      assert_equal false, Coverband::Base.instance.instance_variable_get("@enabled")
-      Coverband::Base.instance.instance_variable_set("@sample_percentage", 100.0)
-      fake_redis = Redis.new
-      Coverband::Base.instance.instance_variable_set("@reporter", Coverband::RedisStore.new(fake_redis))
-      fake_redis.stubs(:info).returns({'redis_version' => 3.0})
-      fake_redis.expects(:sadd).at_least_once
-      fake_redis.expects(:sadd).at_least_once.with("coverband.#{file_with_path}", [6, 87, 151])
-      results = middleware.call(request)
-      assert_equal true, Coverband::Base.instance.instance_variable_get("@enabled")
-    end
+
+  test 'report only on calls when configured' do
+    request = Rack::MockRequest.env_for("/anything.json")
+    Coverband.configuration.trace_point_events = [:call]
+    Coverband::Base.instance.reset_instance
+    middleware = Coverband::Middleware.new(fake_app_with_lines)
+    assert_equal false, Coverband::Base.instance.instance_variable_get("@enabled")
+    Coverband::Base.instance.instance_variable_set("@sample_percentage", 100.0)
+    fake_redis = Redis.new
+    Coverband::Base.instance.instance_variable_set("@reporter", Coverband::RedisStore.new(fake_redis))
+    fake_redis.stubs(:info).returns({'redis_version' => 3.0})
+    fake_redis.expects(:sadd).at_least_once
+    fake_redis.expects(:sadd).at_least_once.with("coverband.#{basic_rack_ruby_file}", [4])
+    results = middleware.call(request)
+    assert_equal true, Coverband::Base.instance.instance_variable_get("@enabled")
   end
 
 
@@ -130,6 +123,10 @@ class MiddlewareTest < Test::Unit::TestCase
 
   def fake_app_with_lines
     @lines_app ||= ::HelloWorld.new
+  end
+
+  def basic_rack_ruby_file
+    File.expand_path('../fake_app/basic_rack.rb', File.dirname(__FILE__))
   end
 
 end
